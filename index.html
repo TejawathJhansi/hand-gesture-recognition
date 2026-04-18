@@ -1,1 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hand Gesture Recognition</title>
+  <style>
+    body {
+      background: #0f0f1a;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 40px;
+    }
+    h1 { color: #00d4ff; font-size: 2rem; }
+    p  { color: #aaa; margin: 10px 0; }
+    .box {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 30px;
+      margin: 30px auto;
+      max-width: 500px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th {
+      background: #00d4ff22;
+      color: #00d4ff;
+      padding: 10px;
+    }
+    td {
+      padding: 10px;
+      border-bottom: 1px solid #333;
+    }
+    canvas {
+      border-radius: 12px;
+      border: 2px solid #00d4ff;
+    }
+    button {
+      padding: 12px 30px;
+      background: #00d4ff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      color: #000;
+      font-weight: bold;
+      margin: 10px;
+    }
+    button:hover { background: #00aacc; }
+  </style>
+</head>
+<body>
 
+  <h1>Hand Gesture Recognition</h1>
+  <p>Real-time gesture detection using MediaPipe</p>
+
+  <button onclick="startWebcam()">Start Webcam</button>
+  <br><br>
+
+  <canvas id="output" width="480" height="360"></canvas>
+
+  <div class="box">
+    <div style="font-size:1.5rem; color:#00ff99;" id="gesture">Gesture: --</div>
+    <div style="color:#ffcc00; font-size:1.2rem; margin-top:8px;" id="action">Action: --</div>
+
+    <table>
+      <tr><th>Gesture</th><th>Action</th></tr>
+      <tr><td>Thumbs Up</td><td>Play</td></tr>
+      <tr><td>Fist</td><td>Pause</td></tr>
+      <tr><td>Open Palm</td><td>Volume Up</td></tr>
+      <tr><td>Peace Sign</td><td>Next Track</td></tr>
+      <tr><td>Point Up</td><td>Volume Down</td></tr>
+    </table>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+  <script>
+    const canvas  = document.getElementById('output');
+    const ctx     = canvas.getContext('2d');
+    const gesture = document.getElementById('gesture');
+    const action  = document.getElementById('action');
+
+    const actionMap = {
+      'Thumbs Up': 'Play',
+      'Fist':      'Pause',
+      'Open Palm': 'Volume Up',
+      'Peace':     'Next Track',
+      'Point Up':  'Volume Down'
+    };
+
+    function detectGesture(landmarks) {
+      const fingers = [];
+      fingers.push(landmarks[4].x < landmarks[3].x ? 1 : 0);
+      const tips = [8, 12, 16, 20];
+      for (let tip of tips) {
+        fingers.push(landmarks[tip].y < landmarks[tip - 2].y ? 1 : 0);
+      }
+      const [thumb, index, middle, ring, pinky] = fingers;
+      if (fingers.every(f => f === 0)) return 'Fist';
+      if (fingers.every(f => f === 1)) return 'Open Palm';
+      if (thumb === 1 && index === 0 && middle === 0 && ring === 0 && pinky === 0) return 'Thumbs Up';
+      if (index === 1 && middle === 1 && thumb === 0 && ring === 0 && pinky === 0) return 'Peace';
+      if (index === 1 && middle === 0 && ring === 0 && pinky === 0) return 'Point Up';
+      return 'Unknown';
+    }
+
+    function startWebcam() {
+      const video = document.createElement('video');
+      video.style.display = 'none';
+      document.body.appendChild(video);
+
+      const hands = new Hands({
+        locateFile: (file) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+      });
+
+      hands.onResults((results) => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+          const landmarks = results.multiHandLandmarks[0];
+          drawConnectors(ctx, landmarks, HAND_CONNECTIONS,
+            { color: '#00d4ff', lineWidth: 2 });
+          drawLandmarks(ctx, landmarks,
+            { color: '#ff0055', lineWidth: 1, radius: 3 });
+          const detected = detectGesture(landmarks);
+          gesture.innerText = 'Gesture: ' + detected;
+          action.innerText  = 'Action: ' + (actionMap[detected] || '--');
+        } else {
+          gesture.innerText = 'Gesture: No hand detected';
+          action.innerText  = 'Action: --';
+        }
+      });
+
+      const camera = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }); },
+        width: 480,
+        height: 360
+      });
+      camera.start();
+    }
+  </script>
+
+</body>
+</html>
